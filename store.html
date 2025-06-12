@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI大纲转思维导图工具 (Gemini版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsmind@0.8.7/es6/jsmind.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/dom-to-image@2.6.0/dist/dom-to-image.min.js" ></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsmind@0.8.7/es6/jsmind.screenshot.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/jsmind@0.8.1/style/jsmind.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4285F4', // Google Blue
+                        'primary-dark': '#357AE8'
+                    }
+                }
+            },
+            darkMode: 'class'
+        }
+    </script>
+    <style>
+        .mind-container {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            transition: all 0.3s ease;
+        }
+        .dark .mind-container {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+        }
+        .loading-dots::after {
+            content: '';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80%, 100% { content: ''; }
+        }
+        .bubble {
+            animation: float 3s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .feature-card {
+            transition: all 0.3s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(66, 133, 244, 0.2);
+        }
+        .config-panel {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .config-panel.active {
+            max-height: 400px; /* 调整以适应内容 */
+        }
+        /* 全屏模式样式 */
+        .mind-container.fullscreen {
+            position: fixed !important;
+            top: 0;
+            left: 0;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 9999;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .fullscreen-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            border: none;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+            z-index: 10000;
+            transition: all 0.3s ease;
+        }
+        .dark .fullscreen-btn {
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+        }
+        .fullscreen-btn:hover {
+            background: rgba(255, 255, 255, 0.9);
+            transform: scale(1.05);
+        }
+        .dark .fullscreen-btn:hover {
+            background: rgba(0, 0, 0, 0.7);
+        }
+    </style>
+</head>
+<body class="bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors">
+    <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                        <span class="text-white font-bold">🧠</span>
+                    </div>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-primary to-primary-dark bg-clip-text text-transparent">
+                        AI思维导图工具 (Gemini版)
+                    </h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="configBtn" class="px-4 py-2 text-sm bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-blue-200 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-600 transition-colors">
+                        ⚙️ API配置
+                    </button>
+                    <button id="tutorialBtn" class="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                        📖 使用教程
+                    </button>
+                    <button id="exportBtn" class="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors">
+                        📤 导出
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div id="configPanel" class="config-panel bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">API Base URL</label>
+                    <input
+                        type="text"
+                        id="baseUrl"
+                        placeholder="https://generativelanguage.googleapis.com/v1beta/models"
+                        value="https://generativelanguage.googleapis.com/v1beta/models"
+                        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 dark:text-white"
+                    >
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">API Key</label>
+                    <input
+                        type="password"
+                        id="apiKey"
+                        placeholder="Your Google AI Studio API Key"
+                        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 dark:text-white"
+                    >
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">模型</label>
+                    <select
+                        id="model"
+                        class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 dark:text-white"
+                    >
+                        <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+                        <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                        <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                        <option value="gemini-pro">gemini-pro</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button id="testApiBtn" class="px-4 py-2 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-lg hover:bg-green-200 dark:hover:bg-green-800 transition-colors text-sm">
+                        🧪 测试连接
+                    </button>
+                </div>
+            </div>
+            <div class="mt-3 text-sm text-gray-600 dark:text-gray-400">
+                <p>💡 请在此处配置您的Google Gemini API密钥。您可以从 <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-primary underline">Google AI Studio</a> 获取。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div id="guideBubble" class="fixed top-20 right-4 bg-primary text-white p-4 rounded-lg shadow-lg z-50 max-w-sm bubble hidden">
+            <div class="flex items-start space-x-3">
+                <span class="text-2xl">💡</span>
+                <div>
+                    <h3 class="font-bold mb-2">欢迎使用AI思维导图工具！</h3>
+                    <div class="text-sm space-y-1">
+                        <p>1️⃣ 先配置您的Google Gemini API信息</p>
+                        <p>2️⃣ 在输入框写下您的核心主题</p>
+                        <p>3️⃣ AI将生成初步框架（可随时调整）</p>
+                        <p>4️⃣ 导出为图片/文本/JSON</p>
+                    </div>
+                    <button id="skipGuide" class="mt-3 text-xs underline opacity-75 hover:opacity-100">跳过引导</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-6">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <div class="flex flex-col lg:flex-row gap-4">
+                    <div class="flex-1">
+                        <label for="topicInput" class="block text-sm font-medium mb-2">主题关键词</label>
+                        <input
+                            type="text"
+                            id="topicInput"
+                            placeholder="请输入您想要生成思维导图的主题，如：人工智能、项目管理、营销策略等..."
+                            class="w-full px-4 py-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-gray-700 dark:text-white"
+                        >
+                    </div>
+                    <div class="flex flex-col justify-end">
+                        <button
+                            id="generateBtn"
+                            class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <span id="generateText">🚀 生成大纲</span>
+                            <span id="loadingText" class="hidden">生成中<span class="loading-dots"></span></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-6">
+            <div class="flex flex-wrap gap-3">
+                <button id="expandBtn" class="feature-card px-4 py-2 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800 transition-all disabled:opacity-50">
+                    🔍 深度扩展
+                </button>
+                <button id="styleBtn" class="feature-card px-4 py-2 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-lg hover:bg-green-200 dark:hover:bg-green-800 transition-all disabled:opacity-50">
+                    🎨 风格转换
+                </button>
+                <button id="validateBtn" class="feature-card px-4 py-2 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 rounded-lg hover:bg-yellow-200 dark:hover:bg-yellow-800 transition-all disabled:opacity-50">
+                    ✅ 逻辑校验
+                </button>
+                <button id="optimizeBtn" class="feature-card px-4 py-2 bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-800 transition-all disabled:opacity-50">
+                    ✨ 可视化优化
+                </button>
+            </div>
+        </div>
+
+        <div id="stylePanel" class="mb-6 hidden">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                <h3 class="text-lg font-medium mb-4">选择转换风格</h3>
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <button class="style-option p-3 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary hover:bg-primary/5 transition-all" data-style="academic">
+                        📚 学术论文式
+                    </button>
+                    <button class="style-option p-3 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary hover:bg-primary/5 transition-all" data-style="creative">
+                        💡 创意脑暴式
+                    </button>
+                    <button class="style-option p-3 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary hover:bg-primary/5 transition-all" data-style="swot">
+                        📊 SWOT分析式
+                    </button>
+                    <button class="style-option p-3 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-primary hover:bg-primary/5 transition-all" data-style="timeline">
+                        🕰️ 时间轴线式
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2">
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <h2 class="text-lg font-medium">思维导图</h2>
+                    </div>
+                    <div class="mind-container" style="height: 500px; position: relative;">
+                        <button class="fullscreen-btn" onclick="toggleFullscreen(this)">
+                            <span class="fullscreen-icon">⛶</span>
+                        </button>
+                        <div id="mindmapContainer" style="width: 100%; height: 100%;"></div>
+                        <div id="emptyState" class="absolute inset-0 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                            <div class="text-center">
+                                <div class="text-6xl mb-4">🌱</div>
+                                <p class="text-lg mb-2">请配置API后输入主题开始生成思维导图</p>
+                                <p class="text-sm">AI将为您创建结构化的知识框架</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <h3 class="text-lg font-medium">大纲文本</h3>
+                    </div>
+                    <div class="p-4">
+                        <div id="outlineContent" class="text-sm space-y-2 max-h-60 overflow-y-auto">
+                            <p class="text-gray-500 dark:text-gray-400 italic">大纲将在这里显示...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <h3 class="text-lg font-medium">操作面板</h3>
+                    </div>
+                    <div class="p-4 space-y-3">
+                        <button id="regenerateBtn" class="w-full px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50">
+                            🔄 重新生成
+                        </button>
+                        <button id="downloadPngBtn" class="w-full px-4 py-2 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-lg hover:bg-green-200 dark:hover:bg-green-800 transition-colors disabled:opacity-50">
+                            🖼️ 导出PNG
+                        </button>
+                        <button id="downloadJsonBtn" class="w-full px-4 py-2 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors disabled:opacity-50">
+                            📄 导出JSON
+                        </button>
+                    </div>
+                </div>
+
+                <div id="statusPanel" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                    <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <h3 class="text-lg font-medium">状态信息</h3>
+                    </div>
+                    <div class="p-4">
+                        <div id="statusContent" class="text-sm text-gray-600 dark:text-gray-400">
+                            <p>⚙️ 请先配置API信息</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 深色模式处理
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+
+        // 全屏切换函数
+        function toggleFullscreen(button) {
+            const container = button.closest('.mind-container');
+            const icon = button.querySelector('.fullscreen-icon');
+            
+            if (container.classList.contains('fullscreen')) {
+                container.classList.remove('fullscreen');
+                icon.textContent = '⛶'; // 全屏图标
+                // 退出全屏时重新渲染思维导图以适应新尺寸
+                if (jsMindInstance) {
+                    setTimeout(() => {
+                        jsMindInstance.resize();
+                    }, 300); // 等待过渡动画完成
+                }
+            } else {
+                container.classList.add('fullscreen');
+                icon.textContent = '⛶'; // 退出全屏图标
+                // 进入全屏时重新渲染思维导图以适应新尺寸
+                if (jsMindInstance) {
+                    setTimeout(() => {
+                        jsMindInstance.resize();
+                    }, 300); // 等待过渡动画完成
+                }
+            }
+        }
+
+        // 全局变量
+        let currentMindData = null;
+        let jsMindInstance = null; // 确保声明在这里，以便全局访问
+
+        // API配置管理
+        class APIConfig {
+            constructor() {
+                this.loadConfig();
+            }
+
+            loadConfig() {
+                this.baseUrl = localStorage.getItem('api_base_url') || 'https://generativelanguage.googleapis.com/v1beta/models';
+                this.apiKey = localStorage.getItem('api_key') || '';
+                this.model = localStorage.getItem('api_model') || 'gemini-2.0-flash';
+                this.updateUI();
+            }
+
+            saveConfig() {
+                localStorage.setItem('api_base_url', this.baseUrl);
+                localStorage.setItem('api_key', this.apiKey);
+                localStorage.setItem('api_model', this.model);
+            }
+
+            updateUI() {
+                document.getElementById('baseUrl').value = this.baseUrl;
+                document.getElementById('apiKey').value = this.apiKey;
+                document.getElementById('model').value = this.model;
+            }
+
+            updateFromUI() {
+                this.baseUrl = document.getElementById('baseUrl').value.trim();
+                this.apiKey = document.getElementById('apiKey').value.trim();
+                this.model = document.getElementById('model').value;
+                this.saveConfig();
+            }
+
+            isValid() {
+                return this.baseUrl && this.apiKey && this.model;
+            }
+        }
+
+        const apiConfig = new APIConfig();
+
+        // API调用类
+        class LLMClient {
+            constructor(config) {
+                this.config = config;
+            }
+
+            // Maps standard OpenAI format to Gemini's format
+            mapMessagesToGemini(messages) {
+                return {
+                    "contents": messages.map(msg => ({
+                        "role": msg.role === "assistant" ? "model" : "user", // Gemini uses 'model' for assistant
+                        "parts": [{ "text": msg.content }]
+                    }))
+                };
+            }
+
+            async callAPI(messages, onStream = null) {
+                if (!this.config.isValid()) {
+                    throw new Error('API配置不完整，请先配置API信息');
+                }
+                
+                // For Gemini, streaming is a query parameter, and the action is part of the URL
+                const useStreaming = !!onStream;
+                const url = `${this.config.baseUrl}/${this.config.model}:generateContent?key=${this.config.apiKey}${useStreaming ? '&alt=sse' : ''}`;
+
+                const requestBody = this.mapMessagesToGemini(messages);
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    const errorMessage = errorData.error?.message || `Request failed with status ${response.status}`;
+                    throw new Error(`API调用失败: ${errorMessage}`);
+                }
+
+                if (useStreaming) {
+                    // Gemini streaming is different, it sends JSON chunks
+                    return await this.handleStream(response, onStream);
+                } else {
+                    const data = await response.json();
+                    if (!data.candidates || !data.candidates[0].content || !data.candidates[0].content.parts) {
+                        throw new Error('API返回格式无效或内容为空');
+                    }
+                    return data.candidates[0].content.parts[0].text;
+                }
+            }
+
+            async handleStream(response, onStream) {
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullContent = '';
+                let buffer = '';
+
+                try {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        buffer += decoder.decode(value, { stream: true });
+                        // Process buffer line by line for SSE data
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); // Keep the last, potentially incomplete line
+
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const jsonData = line.substring(6).trim();
+                                if (jsonData) {
+                                    try {
+                                        const parsed = JSON.parse(jsonData);
+                                        const textPart = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+                                        if (textPart) {
+                                            fullContent += textPart;
+                                            onStream(fullContent, false);
+                                        }
+                                    } catch (e) {
+                                        console.warn('解析流数据失败:', e, 'Raw JSON:', jsonData);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } finally {
+                    onStream(fullContent, true); // Signal completion
+                }
+                return fullContent;
+            }
+
+            async testConnection() {
+                try {
+                    const responseText = await this.callAPI([
+                        { role: 'user', content: '请回复"连接成功"' }
+                    ]);
+                    if (responseText && responseText.includes('连接成功')) {
+                         return { success: true };
+                    }
+                    return { success: false, error: 'API did not return expected response.' };
+                } catch (error) {
+                    return { success: false, error: error.message };
+                }
+            }
+        }
+
+
+        // 事件监听器
+        document.getElementById('configBtn').addEventListener('click', toggleConfigPanel);
+        document.getElementById('testApiBtn').addEventListener('click', testAPIConnection);
+        document.getElementById('generateBtn').addEventListener('click', generateOutline);
+        document.getElementById('tutorialBtn').addEventListener('click', showTutorial);
+        document.getElementById('skipGuide').addEventListener('click', hideGuide);
+        document.getElementById('expandBtn').addEventListener('click', () => executeFeature('expand'));
+        document.getElementById('styleBtn').addEventListener('click', toggleStylePanel);
+        document.getElementById('validateBtn').addEventListener('click', () => executeFeature('validate'));
+        document.getElementById('optimizeBtn').addEventListener('click', () => executeFeature('optimize'));
+        document.getElementById('regenerateBtn').addEventListener('click', regenerateOutline);
+
+        // API配置变更监听
+        ['baseUrl', 'apiKey', 'model'].forEach(id => {
+            document.getElementById(id).addEventListener('change', () => {
+                apiConfig.updateFromUI();
+                updateStatus(); // 配置变更后更新状态
+            });
+        });
+
+        // 风格选择事件
+        document.querySelectorAll('.style-option').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const style = e.currentTarget.dataset.style; // 使用 currentTarget 获取绑定事件的元素
+                executeStyleConversion(style);
+                toggleStylePanel(); // 转换后隐藏面板
+            });
+        });
+
+        // 导出功能
+        document.getElementById('downloadPngBtn').addEventListener('click', exportAsPNG);
+        document.getElementById('downloadJsonBtn').addEventListener('click', exportAsJSON);
+
+        // 核心功能函数
+        function toggleConfigPanel() {
+            const panel = document.getElementById('configPanel');
+            panel.classList.toggle('active');
+        }
+
+        async function testAPIConnection() {
+            const btn = document.getElementById('testApiBtn');
+            const originalText = btn.innerHTML; // 保存原始文本，以便恢复
+
+            btn.disabled = true;
+            btn.innerHTML = '测试中<span class="loading-dots"></span>';
+
+            try {
+                apiConfig.updateFromUI(); // 确保使用最新的配置
+                const client = new LLMClient(apiConfig);
+                const result = await client.testConnection();
+
+                if (result.success) {
+                    updateStatus('✅ API连接测试成功', 'success');
+                    btn.innerHTML = '✅ 连接成功';
+                } else {
+                    updateStatus(`❌ API连接失败: ${result.error}`, 'error');
+                    btn.innerHTML = '❌ 连接失败';
+                }
+            } catch (error) {
+                updateStatus(`❌ API连接失败: ${error.message}`, 'error');
+                btn.innerHTML = '❌ 连接失败';
+            }
+
+            // 延迟恢复按钮文本
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }, 3000); // 3秒后恢复
+        }
+
+        async function generateOutline() {
+            const topic = document.getElementById('topicInput').value.trim();
+            if (!topic) {
+                alert('请输入主题关键词');
+                return;
+            }
+
+            if (!apiConfig.isValid()) {
+                alert('请先配置API信息');
+                toggleConfigPanel();
+                return;
+            }
+
+            const generateBtn = document.getElementById('generateBtn');
+            const generateText = document.getElementById('generateText');
+            const loadingText = document.getElementById('loadingText');
+            const outlineContent = document.getElementById('outlineContent');
+
+            generateBtn.disabled = true;
+            generateText.classList.add('hidden');
+            loadingText.classList.remove('hidden');
+            updateStatus('🚀 正在生成大纲...', 'loading');
+            outlineContent.innerHTML = `<p class="text-gray-500 dark:text-gray-400 italic">生成中...</p>`;
+
+
+            const prompt = `你是一个专业的内容架构师，请根据用户提供的主题生成一个结构清晰、逻辑严谨的多级大纲。要求：
+
+1. 采用标准的Markdown列表格式输出
+2. 包含3-5个一级分类，每个一级分类下包含2-3个二级分类
+3. 确保分类之间互斥且完全穷尽(MECE原则)
+4. 为每个分类点添加emoji图标增强可读性
+5. 输出格式示例：
+
+# [主题名称]
+- 🧠 一级分类1
+  - 🔍 二级分类1
+  - ⚙️ 二级分类2
+- 🌍 一级分类2
+  - 📊 二级分类1
+
+当前主题：${topic}`;
+
+            try {
+                const client = new LLMClient(apiConfig);
+                let fullContent = '';
+
+                await client.callAPI([
+                    { role: 'user', content: prompt }
+                ], (content, isComplete) => {
+                    fullContent = content;
+                    outlineContent.innerHTML = formatMarkdown(content);
+
+                    if (isComplete) {
+                        updateStatus('✅ 大纲生成完成', 'success');
+                        generateBtn.disabled = false;
+                        generateText.classList.remove('hidden');
+                        loadingText.classList.add('hidden');
+
+                        // 自动转换为思维导图
+                        convertToMindMap(fullContent);
+                    }
+                });
+
+            } catch (error) {
+                generateBtn.disabled = false;
+                generateText.classList.remove('hidden');
+                loadingText.classList.add('hidden');
+                updateStatus(`❌ 生成失败: ${error.message}`, 'error');
+                outlineContent.innerHTML = `<p class="text-red-500">生成失败: ${error.message}</p>`;
+            }
+        }
+
+        async function convertToMindMap(outlineContent) {
+            updateStatus('🔄 正在转换为思维导图...', 'loading');
+
+            const prompt = `将以下Markdown大纲转换为jsMind兼容的JSON格式，要求：
+
+1. 遵循jsMind的node_tree数据格式
+2. 自动生成合理的节点ID（如root, 1, 1.1等），确保ID唯一且符合层级关系
+3. 示例输出格式：
+\`\`\`json
+{
+  "meta": {
+    "name": "思维导图主题",
+    "author": "AI Generator",
+    "version": "1.0"
+  },
+  "format": "node_tree",
+  "data": {
+    "id": "root",
+    "topic": "jsMind",
+    "children": [
+      {
+        "id": "easy",
+        "topic": "Easy"
+      }
+    ]
+  }
+}
+\`\`\`
+
+请只输出JSON格式的数据，不要添加其他说明文字，也不要用Markdown代码块包裹。
+
+待转换内容：
+${outlineContent}`;
+
+            try {
+                const client = new LLMClient(apiConfig);
+                const content = await client.callAPI([
+                    { role: 'user', content: prompt }
+                ]);
+
+                try {
+                    // 提取JSON部分，确保能处理多余的文本
+                    const jsonMatch = content.match(/\{[\s\S]*\}/); // More robust JSON finding
+                    let mindData;
+
+                    if (jsonMatch && jsonMatch[0]) {
+                        mindData = JSON.parse(jsonMatch[0]);
+                    } else {
+                        // 如果没有匹配，尝试直接解析
+                        mindData = JSON.parse(content.trim());
+                    }
+
+                    renderMindMap(mindData);
+                    updateStatus('✅ 思维导图生成完成', 'success');
+                } catch (e) {
+                    updateStatus(`❌ JSON解析错误: ${e.message}. 正在尝试修复...`, 'error');
+                    console.error('JSON parse error:', e);
+                    console.log('Raw content from LLM:', content); // 打印AI返回的原始内容
+                    // Fallback: Ask AI to fix the JSON
+                    const fixPrompt = `The following text is not valid JSON. Please fix it and return only the corrected JSON object. Do not add any extra text or explanations. \n\n${content}`;
+                    const fixedContent = await client.callAPI([{ role: 'user', content: fixPrompt }]);
+                    try {
+                        const mindData = JSON.parse(fixedContent.trim());
+                        renderMindMap(mindData);
+                        updateStatus('✅ 思维导图已自动修复并生成', 'success');
+                    } catch (fixError) {
+                         updateStatus(`❌ JSON自动修复失败: ${fixError.message}`, 'error');
+                         console.error('JSON fix error:', fixError);
+                    }
+                }
+            } catch (error) {
+                updateStatus(`❌ 转换失败: ${error.message}`, 'error');
+                console.error('Mind map conversion failed:', error);
+            }
+        }
+
+        async function executeFeature(feature) {
+            if (!currentMindData) {
+                alert('请先生成思维导图');
+                return;
+            }
+
+            if (!apiConfig.isValid()) {
+                alert('请先配置API信息');
+                return;
+            }
+             
+            // Simplified JSON for prompt to save tokens
+            const mindmapJsonString = JSON.stringify(jsMind.util.json.node_tree_to_node_array(currentMindData.data));
+
+            const prompts = {
+                expand: `基于现有思维导图节点，对核心主题或当前显示的所有节点进行深度扩展，要求：
+
+1. 生成3-5个相关子节点，每个子节点添加简要说明（不超过15字）。
+2. 保持原有jsMind的node_tree数据格式不变。
+3. 用🆕标识新增节点。
+4. 在合适的父节点下扩展。
+5. 返回完整的、更新后的jsMind JSON (node_tree格式)。
+
+当前思维导图数据(node_tree格式)：
+${JSON.stringify(currentMindData, null, 2)}
+请输出更新后的jsMind JSON格式数据，只包含JSON部分，不要用Markdown代码块包裹。`,
+
+                validate: `检查当前思维导图存在的逻辑问题，包括：
+
+1. 分类是否遵循MECE原则（Mutually Exclusive, Collectively Exhaustive）。
+2. 节点层级是否合理（一般不超过4层）。
+3. 是否存在重复/冗余节点。
+4. 分支是否平衡（避免某些分支过重）。
+5. 命名是否清晰准确。
+
+按照以下Markdown格式反馈：
+### 思维导图逻辑校验报告
+- ✅ **合理部分**: (指出结构清晰、逻辑严谨之处)
+- ⚠️ **待优化部分**: (说明具体问题及修改建议，例如：分类重叠、某个分支过深等)
+- 📌 **推荐的重结构调整方案**: (如果需要，提供整体结构调整的建议)
+
+当前思维导图数据(node_tree格式)：
+${JSON.stringify(currentMindData, null, 2)}`,
+
+                optimize: `为思维导图提供可视化增强建议：
+
+1. 根据内容推荐配色方案（如：科技蓝/生态绿/商务灰等，提供具体的颜色代码或主题名）。
+2. 建议关键节点的图标（使用emoji代码，例如：🔥、💡、📊）。
+3. 重要程度标记方案（如：⭐️等级、🔴🟡🟢颜色点、加粗字体等，说明如何应用）。
+4. 关系连线建议（如：虚线、加粗、箭头、不同颜色表示不同关系等）。
+5. 整体布局风格建议（如：中心辐射、左右对称、树状等）。
+
+当前思维导图数据(node_tree格式)：
+${JSON.stringify(currentMindData, null, 2)}`
+            };
+            
+            try {
+                updateStatus(`🔄 正在执行 ${feature} 功能...`, 'loading');
+                const client = new LLMClient(apiConfig);
+
+                const featurePrompt = prompts[feature];
+                if (!featurePrompt) {
+                    throw new Error(`未知功能: ${feature}`);
+                }
+
+                const content = await client.callAPI([
+                    { role: 'user', content: featurePrompt }
+                ]);
+
+                if (feature === 'expand') {
+                    try {
+                        const jsonMatch = content.match(/\{[\s\S]*\}/);
+                        let updatedMindData;
+                        if (jsonMatch && jsonMatch[0]) {
+                            updatedMindData = JSON.parse(jsonMatch[0]);
+                        } else {
+                            updatedMindData = JSON.parse(content.trim());
+                        }
+                        renderMindMap(updatedMindData); // 重新渲染导图
+                        updateStatus('✅ 深度扩展完成，思维导图已更新', 'success');
+                    } catch (e) {
+                        updateStatus(`❌ 扩展功能JSON解析错误: ${e.message}`, 'error');
+                        console.error('Expand JSON parse error:', e);
+                        console.log('Raw content for expand:', content);
+                    }
+                } else {
+                    // 对于 validate 和 optimize，直接在状态面板显示Markdown内容
+                    document.getElementById('statusContent').innerHTML = formatMarkdown(content);
+                    updateStatus(`✅ ${feature} 功能执行完成`, 'success');
+                }
+
+            } catch (error) {
+                updateStatus(`❌ 执行 ${feature} 失败: ${error.message}`, 'error');
+                console.error(`Error executing ${feature}:`, error);
+            }
+        }
+
+
+        async function executeStyleConversion(style) {
+            if (!currentMindData) {
+                alert('请先生成思维导图');
+                return;
+            }
+
+            if (!apiConfig.isValid()) {
+                alert('请先配置API信息');
+                return;
+            }
+
+            const styleDescriptions = {
+                academic: '学术论文式（正式严谨，结构逻辑清晰）',
+                creative: '创意脑暴式（活泼发散，强调关联和灵感）',
+                swot: 'SWOT分析式（分为优势、劣势、机会、威胁四个主要分支）',
+                timeline: '时间轴线式（按照时间顺序或发展阶段组织）'
+            };
+
+            const prompt = `将当前思维导图转换为"${styleDescriptions[style]}"风格，要求：
+
+1. 保持核心主题不变，但调整节点分类逻辑以匹配目标风格。
+2. 修改主题和节点表述方式，使其更符合所选风格的语气和侧重点。
+3. 添加风格对应的视觉元素标记或关键词，例如：🕰️表示时间节点，📊表示分析。
+4. 如果风格需要（如SWOT），确保一级分类符合风格要求。
+5. 返回完整的、更新后的jsMind JSON (node_tree格式)。
+
+请输出新的jsMind兼容JSON格式数据，只包含JSON部分，不要使用Markdown代码块包裹。
+
+当前思维导图数据(node_tree格式)：
+${JSON.stringify(currentMindData, null, 2)}`;
+
+            try {
+                updateStatus(`🎨 正在转换为 ${styleDescriptions[style]}...`, 'loading');
+                const client = new LLMClient(apiConfig);
+                const content = await client.callAPI([
+                    { role: 'user', content: prompt }
+                ]);
+
+                try {
+                    const jsonMatch = content.match(/\{[\s\S]*\}/);
+                    let mindData;
+
+                    if (jsonMatch && jsonMatch[0]) {
+                        mindData = JSON.parse(jsonMatch[0]);
+                    } else {
+                        mindData = JSON.parse(content.trim());
+                    }
+
+                    renderMindMap(mindData);
+                    updateStatus('✅ 风格转换完成', 'success');
+                } catch (e) {
+                    updateStatus(`❌ 风格转换后JSON解析错误: ${e.message}`, 'error');
+                    console.error('Style conversion JSON parse error:', e);
+                    console.log('Raw content from LLM (Style Conversion):', content);
+                }
+            } catch (error) {
+                updateStatus(`❌ 风格转换失败: ${error.message}`, 'error');
+                console.error('Style conversion failed:', error);
+            }
+        }
+
+
+        // 辅助函数
+        function renderMindMap(mindData) {
+            console.log("Rendering mind map with data:", JSON.stringify(mindData));
+            currentMindData = mindData;
+
+            const container = document.getElementById('mindmapContainer');
+            const emptyState = document.getElementById('emptyState');
+
+            // 隐藏空状态
+            emptyState.style.display = 'none';
+
+            // 清除之前的思维导图
+            container.innerHTML = '';
+
+            // 检查 jsMind 是否已加载
+            if (typeof jsMind === 'undefined') {
+                console.error("jsMind library is not loaded! Please check if jsmind.js script is properly included and accessible.");
+                updateStatus("❌ 错误：jsMind库未加载，无法渲染思维导图。请检查网络连接或HTML文件结构。", "error");
+                return;
+            }
+
+            // 创建新的思维导图
+            const options = {
+                container: 'mindmapContainer',
+                editable: true,
+                theme: 'primary', // Using the blue theme for Google
+            };
+
+            try {
+                // Important: Ensure data format is what jsMind expects. AI might return node_array or node_tree.
+                // jsMind.show() expects node_tree format.
+                if (mindData.format === "node_array") {
+                     mindData.data = jsMind.util.json.node_array_to_node_tree(mindData.data);
+                     mindData.format = "node_tree";
+                }
+                
+                jsMindInstance = new jsMind(options);
+                jsMindInstance.show(mindData);
+
+            } catch (e) {
+                console.error("Error initializing jsMind:", e);
+                updateStatus(`❌ 思维导图渲染失败: ${e.message}`, 'error');
+                return; // 渲染失败则不再执行后续操作
+            }
+
+            // 启用功能按钮
+            enableFeatureButtons();
+        }
+
+        function enableFeatureButtons() {
+            ['expandBtn', 'styleBtn', 'validateBtn', 'optimizeBtn', 'regenerateBtn', 'downloadPngBtn', 'downloadJsonBtn'].forEach(id => {
+                document.getElementById(id).disabled = false;
+            });
+        }
+
+        function formatMarkdown(content) {
+            // A simple markdown to HTML converter
+            return content
+                .replace(/^# (.*$)/gim, '<h1 class="text-xl font-bold mb-2">$1</h1>')
+                .replace(/^## (.*$)/gim, '<h2 class="text-lg font-semibold mb-2">$1</h2>')
+                .replace(/^### (.*$)/gim, '<h3 class="text-base font-medium mb-1">$1</h3>')
+                .replace(/^\* (.*$)/gim, '<div class="ml-0 mb-1">• $1</div>') // for lists with *
+                .replace(/^\- (.*$)/gim, '<div class="ml-0 mb-1">• $1</div>') // for lists with -
+                .replace(/^  - (.*$)/gim, '<div class="ml-4 mb-1">◦ $1</div>')
+                .replace(/^    - (.*$)/gim, '<div class="ml-8 mb-1">▪ $1</div>')
+                .replace(/\n/g, '<br>'); // 将换行符转换为 <br>
+        }
+
+        function updateStatus(message = null, type = 'info') {
+            const statusContent = document.getElementById('statusContent');
+            const colors = {
+                success: 'text-green-600 dark:text-green-400',
+                error: 'text-red-500 dark:text-red-400',
+                loading: 'text-blue-600 dark:text-blue-400',
+                info: 'text-gray-600 dark:text-gray-400'
+            };
+
+            if (message) {
+                statusContent.innerHTML = `<p class="${colors[type]}">${message}</p>`;
+            } else {
+                // 如果没有提供消息，则根据API配置状态更新
+                if (apiConfig.isValid()) {
+                    statusContent.innerHTML = '<p class="text-green-600 dark:text-green-400">🔥 准备就绪，等待您的输入</p>';
+                } else {
+                    statusContent.innerHTML = '<p class="text-orange-500 dark:text-orange-400">⚙️ 请先配置API信息</p>';
+                }
+            }
+        }
+
+        function toggleStylePanel() {
+            const panel = document.getElementById('stylePanel');
+            panel.classList.toggle('hidden');
+        }
+
+        function showTutorial() {
+            const bubble = document.getElementById('guideBubble');
+            bubble.classList.remove('hidden');
+        }
+
+        function hideGuide() {
+            const bubble = document.getElementById('guideBubble');
+            bubble.classList.add('hidden');
+        }
+
+        function regenerateOutline() {
+            // 重新生成前确保主题输入框有内容
+            if (document.getElementById('topicInput').value.trim()) {
+                generateOutline();
+            } else {
+                alert('请先输入主题关键词再重新生成。');
+            }
+        }
+
+        function exportAsPNG() {
+            if (!jsMindInstance) {
+                alert('请先生成思维导图');
+                return;
+            }
+            // Uses the jsmind.screenshot.js library
+            jsMindInstance.shoot();
+        }
+
+        function exportAsJSON() {
+            if (!currentMindData) {
+                alert('请先生成思维导图');
+                return;
+            }
+
+            const dataStr = JSON.stringify(currentMindData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'mindmap.json';
+            link.click();
+            URL.revokeObjectURL(url);
+            updateStatus('✅ 思维导图已导出为 JSON 文件', 'success');
+        }
+
+        // 页面加载完成后的初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            updateStatus(); // 初始状态显示
+
+            // 确保jsMind库在DOM内容加载后可用
+            if (typeof jsMind === 'undefined') {
+                updateStatus("❌ 警告：jsMind库可能未正确加载。请检查您的网络或脚本引用。", "error");
+            }
+
+            setTimeout(() => {
+                showTutorial();
+                setTimeout(hideGuide, 10000); // 10秒后自动隐藏
+            }, 1000);
+        });
+
+        // 回车键触发生成
+        document.getElementById('topicInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                generateOutline();
+            }
+        });
+    </script>
+</body>
+</html>
